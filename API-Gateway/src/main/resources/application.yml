@@ -1,0 +1,62 @@
+server:
+  port: 8084
+  servlet:
+   session:
+     cookie:
+       same-site: lax
+spring:
+  application:
+     name: API-GATEWAY
+
+  cloud:
+    gateway:
+      routes:
+       - id: USER-SERVICE
+         uri: lb://USER-SERVICE
+         predicates:
+          - Path=/users/**
+
+       - id: HOTEL-SERVICE
+         uri: lb://HOTEL-SERVICE
+         predicates:
+           - Path=/hotels/**
+
+       - id: RATING-SERVICE
+         uri: lb://USER-SERVICE
+         predicates:
+           - Path=/users/**,/staffs/**
+#w e can only access the apis which are configured inthe app.properties file ,for example
+#Path=/users/** --> we can only access the api urls from users and after users
+#but what if we have to access other controllers?
+#for that we have to add that in the config file as above
+eureka:
+  instance:
+    prefer-ip-address: true
+
+  client:
+  fetchRegistry: true
+  fetch-registry: true
+  register-with-eureka: true
+  service:
+    url:
+    default-zone: http://localhost:8761/eureka
+
+# OKTA configurations
+
+# the app issuer url from the okta website
+okta:
+  oauth2:
+    issuer: https://dev-91788305.okta.com/oauth2/default
+
+    # it is also from OKTA
+    audience: api://default
+
+    # id and secret are from the okta application
+    client-id: 0oaa1jjv39BtGP5CS5d7
+    client-scopes: jJ7TU7rAoPbxX-IMWyzDozcs1oPQIUsMxunkkOtX
+
+    # basically the scope of the app
+    scopes: openid, profile, email, offline_access
+
+
+

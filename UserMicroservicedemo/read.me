@@ -1,0 +1,148 @@
+# HOW TO READ THE CONFIG FROM GIThUB
+
+to read the config details from gitHub
+1. we need to add the config client dependency into the service for which
+we want to use the gitHub configs(user service in our case or any service can be used)
+
+2. we need to add spring.config.import=CONFIG-SERVER(config service): URL of the service
+
+3. we also have to annotate the user service main class with @configCLient(need to check on this)
+
+4. default is for app.prop and if we give the uer:profiles as dev then it will pcik the dev config
+# to learn more you can google spring cloud config server and client
+
+
+
+#FAULT TOLERANCE
+------------------
+BACK DROP: WHEN the client tries to call the user service it has to go via the api gateway ,
+and our dependency is such that whn the api gateway calls the user service ,
+the user service will in turn call the rating service to fetch the rating
+
+SCENARIO: In case the rating service is down due to some unknown reason
+then there is no point in user service calling the rating service because it will keep failing
+what should we do in this scenario?
+
+ANS: CIRCUIT BREAKERS
+
+WORKING OF CIRCUIT BREAKER:
+--------------------------------
+there are 3 states basically OPEN, CLOSED and HALF-OPEN
+CLOSED: when all dependent service is up and running and all the calls from user service to rating service
+        are getting success then the circuit breaker believes or understands that the services are fine
+
+OPEN: there is a theshold above which if the calls are failing then the CB will understand that the service is down or not working
+      so it will move to OPEN state
+
+  it will stay in the open state until the mentioned time duration
+
+HALF-OPEN: after the break time , the CB will try sending some calls (defined threshold) and if the success is above or equal
+           to the threshold then it will again change the state to CLOSED if not then it will go back to OPEN state
+
+
+ # it is achieved using
+  1. hystrix(outdated)
+  2. Resilience4j(google it)
+
+
+steps to implement fault tolerance using resilience4j
+1. add the actuatr dependency and the AOP dependency and also add the circuit breaker dependency
+2. add the @circuitBreaker to the service method which is calling the other service(where the fault can actually happen)
+3. addthe fallbck method next to it and create a fallback method(make sure the return type of both the methods is same)
+4. we need to configure the resilience4j(app.prop or we can create java config file)
+
+# Implementing resilience4J RETRY
+-----------------------------------
+scenario: suppose our rating service is not down instead it is responding slowly, in that case we need to retry few times before giving the response
+
+steps: add the pom dependency
+2. add @Retry to the method which internally calls methods of other services
+3. add the config details in application.properties
+
+#Rate limiter
+----------------
+scenario: suppose a particular client is tyring to hit the service multiple times (>1000) which is not required
+in such cases we can set a limit for how many requests a particular client or a particular service can be accessed, after that limit the client cant access the
+service.THis can be achieved thorugh rate limiter
+
+steps: steps remain similar to REtry or circuit breaker
+I havent not implemented it because it is not required ,we can try it
+
+# Implementing spring security with OKTA
+--------------------------------------------------------
+ mechanism:
+
+               OKTA           hotel service
+                |
+                |
+    client-----API-------user service
+               gate
+               way       Rating service
+
+until now we were allowing any client to access or pass the requests to our services.now we will secure it with okta
+
+* when the client hits the API gateway ,the api gateway will call the OKTA service which will authenticate(OAuth) the client.
+ it will basically generate a token and give it to the API gateway and the gateway will give it to the client using this tokn acts as a license for cleitn
+ to pass the requests.
+* when the client requests the api gateway it will carry the token along with the request and give it to the user service
+and it is carried further to other services from there if needed.
+
+steps: go to okta website and create the application, add the groups and add the people
+(explore more on OKTA)
+
+we need to add a new claim and also go through scopes once
+
+we need to apply OAuth to all the services
+a. In API Gateway
+  *  add the okta and spring security dependencies
+  * add config details
+  * create a config class annotated with @EnableWebFLuxSecurity
+  @EnableWebFluxSecurity: in our project the API gateway service supports webflux cloud so instead of using
+                          @EnableSecurity we use @EnableWebfluxSecurtiy
+  * create a @Bean method which return 'SecurityWebFilterChain' and in the parameters we pass 'ServerHttpSecurity' object(google for more understanding)
+  * create a controller for okta login
+     * in the controller we will be basically returning the Response class which will give the token,etc to the client
+     * create an AUthResponse class (POJO)
+
+     login method:
+            in the parameters of login method we will give 3 parameters with annotations
+               1. @RegisteredOAuth2AuthorizedClient OAuth2AuthorizedClient client
+               2. @AuthenticationPrincipal OidcUser user,
+               3. Model model
+
+  test:
+      check the API gateway in postman, it should not allow to connect to the user service
+
+
+ b. UserService
+   We also have to secure our user service because still the client can directly access the host of user service,
+   Here the User service is actually interacting with the rating service also receiving the response so, we it os also acting as a client
+   firstly we need to secure it as a client
+
+   steps:* add dependencies
+         * add the config details of okta
+         * It is also acting as a client so we need to add security client config as well
+         * create a config file, with @EnableWebSecurity(since we are not using web flux so just normal web security)
+         * create @Bean method which returns SecurityFilterChain and takes argument as HttpSecurity object
+         * We have to create an INTERCEPTOR for the method in user service which is interacting with other services
+         (after adding the interceptor the method from user service adds a bearer token to the header request and passes it to the next service call)
+
+        Steps :
+             * create a config class FiegnClientInterceptor class implements RequestInterceptor(google more about okta spring dev)
+             * implement the override method 'apply'
+             * we have to create a @Bean class of 'OAuth2AuthorizedClientManager'
+
+        Interceptor for RestTemplate:
+           * create a @Bean method (since we already created a return type RestTemplate method)
+           *
+
+   c. RATING AND HOTEL SERVICES: here we only need to add cloud and okta dependencies
+                                 not client since these services are not calling any
+                                 other services internally.
+
+              steps: add the dependencies
+                     add the config
+
+
+  SCENARIO: we only want our getSingleHotelApi to get called via service only ,it cannot be called directly
+
